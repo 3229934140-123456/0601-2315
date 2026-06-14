@@ -1,0 +1,18 @@
+/// <reference types="vite/client" />
+
+declare module '*.vue' {
+  import type { DefineComponent } from 'vue'
+  const component: DefineComponent<{}, {}, any>
+  export default component
+}
+
+declare interface Window {
+  electronAPI: {
+    selectDirectory: () => Promise<string[]>
+    selectFiles: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string[]>
+    saveFile: (options: { defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }>; content?: string }) => Promise<boolean>
+    readFile: (filePath: string) => Promise<string | null>
+    getUserDataPath: () => Promise<string>
+    openExternal: (url: string) => Promise<void>
+  }
+}
