@@ -11,7 +11,7 @@
                 <span v-else>文字转写校对</span>
               </div>
               <div class="page-subtitle">
-                <span v-if="currentAsset">{{ { audio: '音频', video: '视频' }[currentAsset.type] }}素材转写与校对</span>
+                <span v-if="currentAsset">{{ ({ audio: '音频', video: '视频' } as Record<string, string>)[currentAsset.type] }}素材转写与校对</span>
                 <span v-else>请先选择素材</span>
               </div>
             </div>
@@ -20,7 +20,7 @@
         <div class="header-actions flex-between gap-12">
           <el-select v-model="currentAssetId" placeholder="选择素材" filterable style="width: 260px;" @change="onAssetChange">
             <el-option v-for="a in mediaAssets" :key="a.id" :label="a.title" :value="a.id">
-              <el-tag size="small" style="margin-right: 8px;">{{ { audio: '音频', video: '视频' }[a.type] }}</el-tag>
+              <el-tag size="small" style="margin-right: 8px;">{{ ({ audio: '音频', video: '视频' } as Record<string, string>)[a.type] }}</el-tag>
               <span>{{ a.title }}</span>
             </el-option>
           </el-select>

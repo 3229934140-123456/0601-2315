@@ -6,6 +6,11 @@ declare module '*.vue' {
   export default component
 }
 
+declare module 'element-plus/dist/locale/zh-cn.mjs' {
+  const zhCn: any
+  export default zhCn
+}
+
 declare interface Window {
   electronAPI: {
     selectDirectory: () => Promise<string[]>

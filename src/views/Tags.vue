@@ -157,7 +157,8 @@ import { useTagStore } from '@/stores/profile'
 import { useMediaStore } from '@/stores/media'
 import { useInterviewPlanStore } from '@/stores/interviewPlan'
 import { useProfileStore } from '@/stores/profile'
-import type { TopicTag, SearchResult } from '@/types'
+import { transcriptStore } from '@/stores/storage'
+import type { TopicTag, SearchResult, TranscriptSegment } from '@/types'
 
 const router = useRouter()
 const tagStore = useTagStore()
@@ -274,7 +275,12 @@ function doSearch() {
   const keyword = searchKeyword.value.trim().toLowerCase()
 
   if (searchType.value === 'all' || searchType.value === 'segment') {
-    mediaStore.transcripts.forEach(seg => {
+    const allAssetIds = mediaStore.assets.map(a => a.id)
+    const allTranscriptsMap = transcriptStore.getByMultipleAssets(allAssetIds)
+    const allTranscripts: TranscriptSegment[] = []
+    Object.values(allTranscriptsMap).forEach(list => allTranscripts.push(...list))
+
+    allTranscripts.forEach(seg => {
       if (!seg.text) return
       const text = seg.text.toLowerCase()
       if (tagName) {
@@ -340,8 +346,10 @@ function doSearch() {
       if (keyword) {
         const titleMatch = plan.title.toLowerCase().includes(keyword)
         const descMatch = plan.description?.toLowerCase().includes(keyword)
-        const outlineMatch = plan.outline?.some(o => o.content?.toLowerCase().includes(keyword))
-        if (!titleMatch && !descMatch && !outlineMatch) return
+        const questionMatch = plan.questions?.some(q => 
+          q.content?.toLowerCase().includes(keyword) || q.category?.toLowerCase().includes(keyword)
+        )
+        if (!titleMatch && !descMatch && !questionMatch) return
       }
       results.push({
         type: 'plan',

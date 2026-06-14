@@ -44,7 +44,7 @@ function createWindow() {
     minWidth: 1200,
     minHeight: 768,
     title: '口述史采录工作站',
-    icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
+    icon: process.env.VITE_PUBLIC ? path.join(process.env.VITE_PUBLIC, 'favicon.ico') : undefined,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
       nodeIntegration: false,

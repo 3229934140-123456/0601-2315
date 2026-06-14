@@ -78,7 +78,7 @@
                 v-if="isRecording || isPaused"
                 size="large"
                 type="danger"
-                :icon="VideoStop"
+                :icon="CircleClose"
                 @click="stopRecording"
               >
                 停止录制
@@ -194,7 +194,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  VideoCamera, Microphone, View, VideoPlay, VideoStop, Refresh, Check, Delete
+  VideoCamera, Microphone, View, VideoPlay, CircleClose, Refresh, Check, Delete
 } from '@element-plus/icons-vue'
 import { useInterviewPlanStore } from '@/stores/interviewPlan'
 import { useMediaStore } from '@/stores/media'
@@ -247,7 +247,13 @@ const selectedSpeaker = ref('')
 const selectedPlanId = ref('')
 const currentPlan = computed(() => planStore.plans.find(p => p.id === selectedPlanId.value))
 
-const recordedClips = ref<Array<{ type: 'video' | 'audio'; blob: Blob; duration: string; size: number }>>([])
+const recordedClips = ref<Array<{
+  type: 'video' | 'audio'
+  blob: Blob
+  duration: string
+  durationSeconds: number
+  size: number
+}>>([])
 
 const recordInfo = reactive({
   title: '',
@@ -418,6 +424,7 @@ function startRecording() {
         type: recordMode.value,
         blob,
         duration: formattedTime.value,
+        durationSeconds: elapsedSeconds.value,
         size: blob.size
       })
     }
@@ -473,7 +480,13 @@ function removeClip(idx: number) {
   recordedClips.value.splice(idx, 1)
 }
 
-async function saveClip(clip: { type: 'video' | 'audio'; blob: Blob; duration: string; size: number }) {
+async function saveClip(clip: {
+  type: 'video' | 'audio'
+  blob: Blob
+  duration: string
+  durationSeconds: number
+  size: number
+}) {
   const fileName = `${recordInfo.title || '录制素材'}_${Date.now()}.${recordInfo.format || 'webm'}`
   const persisted = await persistBlobFile(clip.blob, fileName, clip.type === 'video' ? 'video/webm' : 'audio/webm')
   const assetData = {
@@ -483,7 +496,7 @@ async function saveClip(clip: { type: 'video' | 'audio'; blob: Blob; duration: s
     persistentPath: persisted.persistentPath,
     fileName,
     fileSize: persisted.size || clip.size,
-    duration: elapsedSeconds.value,
+    duration: clip.durationSeconds,
     format: recordInfo.format,
     interviewPlanId: selectedPlanId.value || undefined,
     intervieweeName: recordInfo.intervieweeName || undefined,

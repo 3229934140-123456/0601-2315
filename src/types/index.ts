@@ -94,6 +94,7 @@ export interface PersonProfile {
   id: string
   intervieweeId?: string
   name: string
+  gender?: '男' | '女'
   aliases?: string[]
   birthDate?: string
   deathDate?: string

@@ -430,7 +430,8 @@ function authTypeTag(type?: string) {
 
 function saveProfile() {
   if (!editForm.name?.trim()) { ElMessage.warning('请输入姓名'); return }
-  profileStore.update(profileId.value, { ...editForm } as any)
+  const { chronology, relatedPhotos, authorization, ...cleanUpdate } = { ...editForm }
+  profileStore.update(profileId.value, cleanUpdate)
   ElMessage.success('保存成功')
   showEditDialog.value = false
 }

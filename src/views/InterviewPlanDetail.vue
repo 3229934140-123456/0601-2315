@@ -97,7 +97,7 @@
             <el-table-column label="类型" width="70">
               <template #default="{ row }">
                 <el-tag :type="row.type === 'video' ? 'primary' : row.type === 'audio' ? '' : 'success'" size="small">
-                  {{ { audio: '音频', video: '视频', image: '图片', document: '文档' }[row.type] }}
+                  {{ ({ audio: '音频', video: '视频', image: '图片', document: '文档' } as Record<string, string>)[row.type] }}
                 </el-tag>
               </template>
             </el-table-column>
