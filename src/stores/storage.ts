@@ -178,6 +178,20 @@ export const transcriptStore = {
     items.push(...newItems)
     writeToStorage(STORAGE_KEYS.TRANSCRIPTS, items)
     return newItems
+  },
+  getByMultipleAssets(assetIds: string[]): Record<string, TranscriptSegment[]> {
+    const all = readFromStorage<TranscriptSegment>(STORAGE_KEYS.TRANSCRIPTS)
+    const result: Record<string, TranscriptSegment[]> = {}
+    assetIds.forEach(id => { result[id] = [] })
+    all.forEach(t => {
+      if (result[t.mediaAssetId]) {
+        result[t.mediaAssetId].push(t)
+      }
+    })
+    Object.keys(result).forEach(id => {
+      result[id].sort((a, b) => a.startTime - b.startTime)
+    })
+    return result
   }
 }
 

@@ -275,67 +275,81 @@ function doSearch() {
 
   if (searchType.value === 'all' || searchType.value === 'segment') {
     mediaStore.transcripts.forEach(seg => {
+      if (!seg.text) return
       const text = seg.text.toLowerCase()
-      const hasKeyword = !keyword || text.includes(keyword)
-      if (hasKeyword && seg.text) {
-        results.push({
-          type: 'segment',
-          id: seg.id,
-          title: `片段 - ${formatTime(seg.startTime)}`,
-          snippet: seg.text.slice(0, 100),
-          matchedTags: tagName ? [tagName] : [],
-          timestamp: seg.startTime,
-          mediaAssetId: seg.mediaAssetId
-        })
+      if (tagName) {
+        const asset = mediaStore.assets.find(a => a.id === seg.mediaAssetId)
+        const hasTag = asset?.tags.includes(tagName)
+        if (!hasTag) return
       }
+      if (keyword && !text.includes(keyword)) return
+      results.push({
+        type: 'segment',
+        id: seg.id,
+        title: `片段 - ${formatTime(seg.startTime)}`,
+        snippet: seg.text.slice(0, 100),
+        matchedTags: tagName ? [tagName] : [],
+        timestamp: seg.startTime,
+        mediaAssetId: seg.mediaAssetId
+      })
     })
   }
 
   if (searchType.value === 'all' || searchType.value === 'asset') {
     mediaStore.assets.forEach(asset => {
-      const titleMatch = !keyword || asset.title.toLowerCase().includes(keyword)
-      const tagMatch = !tagName || asset.tags.includes(tagName)
-      if (titleMatch || tagMatch) {
-        results.push({
-          type: 'asset',
-          id: asset.id,
-          title: asset.title,
-          snippet: asset.description || asset.fileName,
-          matchedTags: tagName ? [tagName] : asset.tags
-        })
+      if (tagName && !asset.tags.includes(tagName)) return
+      if (keyword) {
+        const titleMatch = asset.title.toLowerCase().includes(keyword)
+        const nameMatch = asset.fileName?.toLowerCase().includes(keyword)
+        const descMatch = asset.description?.toLowerCase().includes(keyword)
+        if (!titleMatch && !nameMatch && !descMatch) return
       }
+      results.push({
+        type: 'asset',
+        id: asset.id,
+        title: asset.title,
+        snippet: asset.description || asset.fileName,
+        matchedTags: tagName ? [tagName] : asset.tags
+      })
     })
   }
 
   if (searchType.value === 'all' || searchType.value === 'person') {
     profileStore.profiles.forEach(p => {
-      const nameMatch = !keyword || p.name.toLowerCase().includes(keyword)
-      const tagMatch = !tagName || p.tags.includes(tagName)
-      if (nameMatch || tagMatch) {
-        results.push({
-          type: 'person',
-          id: p.id,
-          title: p.name,
-          snippet: p.artCategory || p.occupation || p.biography?.slice(0, 80),
-          matchedTags: tagName ? [tagName] : p.tags
-        })
+      if (tagName && !p.tags.includes(tagName)) return
+      if (keyword) {
+        const nameMatch = p.name.toLowerCase().includes(keyword)
+        const bioMatch = p.biography?.toLowerCase().includes(keyword)
+        const artMatch = p.artCategory?.toLowerCase().includes(keyword)
+        const occMatch = p.occupation?.toLowerCase().includes(keyword)
+        if (!nameMatch && !bioMatch && !artMatch && !occMatch) return
       }
+      results.push({
+        type: 'person',
+        id: p.id,
+        title: p.name,
+        snippet: p.artCategory || p.occupation || p.biography?.slice(0, 80),
+        matchedTags: tagName ? [tagName] : p.tags
+      })
     })
   }
 
   if (searchType.value === 'all' || searchType.value === 'plan') {
     planStore.plans.forEach(plan => {
-      const titleMatch = !keyword || plan.title.toLowerCase().includes(keyword)
-      const tagMatch = !tagName || plan.tags.includes(tagName)
-      if (titleMatch || tagMatch) {
-        results.push({
-          type: 'plan',
-          id: plan.id,
-          title: plan.title,
-          snippet: plan.description,
-          matchedTags: tagName ? [tagName] : plan.tags
-        })
+      if (tagName && !plan.tags.includes(tagName)) return
+      if (keyword) {
+        const titleMatch = plan.title.toLowerCase().includes(keyword)
+        const descMatch = plan.description?.toLowerCase().includes(keyword)
+        const outlineMatch = plan.outline?.some(o => o.content?.toLowerCase().includes(keyword))
+        if (!titleMatch && !descMatch && !outlineMatch) return
       }
+      results.push({
+        type: 'plan',
+        id: plan.id,
+        title: plan.title,
+        snippet: plan.description,
+        matchedTags: tagName ? [tagName] : plan.tags
+      })
     })
   }
 

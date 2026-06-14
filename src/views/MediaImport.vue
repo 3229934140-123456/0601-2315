@@ -188,7 +188,8 @@ import {
 import { useMediaStore } from '@/stores/media'
 import { useInterviewPlanStore } from '@/stores/interviewPlan'
 import { useIntervieweeStore } from '@/stores/interviewee'
-import { useTagStore } from '@/stores/profile'
+import { useProfileStore, useTagStore } from '@/stores/profile'
+import { persistUploadedFile, persistExternalFile, isElectron } from '@/utils/persist'
 import type { MediaAsset } from '@/types'
 import dayjs from 'dayjs'
 
@@ -268,7 +269,21 @@ function detectFileType(fileName: string): MediaAsset['type'] {
   return 'document'
 }
 
-function triggerFileSelect() { fileInputRef.value?.click() }
+async function triggerFileSelect() {
+  if (window.electronAPI?.selectFiles) {
+    const paths = await window.electronAPI.selectFiles([
+      { name: '音视频', extensions: ['mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'mp4', 'mov', 'avi', 'mkv', 'webm', 'wmv'] },
+      { name: '图片', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] },
+      { name: '文档', extensions: ['pdf', 'doc', 'docx', 'txt'] },
+      { name: '所有文件', extensions: ['*'] }
+    ])
+    if (paths?.length) {
+      processPathsAsPromised(paths)
+    }
+  } else {
+    fileInputRef.value?.click()
+  }
+}
 
 function onFileSelect(e: Event) {
   const files = (e.target as HTMLInputElement).files
@@ -282,22 +297,50 @@ function onFileDrop(e: DragEvent) {
   if (files) processFiles(Array.from(files))
 }
 
-function processFiles(files: File[]) {
-  files.forEach(file => {
+async function processPathsAsPromised(paths: string[]) {
+  let count = 0
+  for (const p of paths) {
+    const result = await persistExternalFile(p)
+    if (result) {
+      const fileName = p.split(/[\\/]/).pop() || '未命名'
+      const type = detectFileType(fileName)
+      mediaStore.addAsset({
+        type,
+        title: fileName.replace(/\.[^.]+$/, ''),
+        filePath: result.filePath,
+        persistentPath: result.persistentPath,
+        fileName,
+        fileSize: result.size,
+        format: fileName.split('.').pop(),
+        tags: [],
+        description: ''
+      })
+      count++
+    }
+  }
+  if (count > 0) ElMessage.success(`已导入 ${count} 个文件（已持久化）`)
+  else if (paths.length > 0) ElMessage.warning('文件导入失败，请检查路径是否有效')
+}
+
+async function processFiles(files: File[]) {
+  let count = 0
+  for (const file of files) {
     const type = detectFileType(file.name)
-    const url = URL.createObjectURL(file)
+    const persisted = await persistUploadedFile(file)
     mediaStore.addAsset({
       type,
       title: file.name.replace(/\.[^.]+$/, ''),
-      filePath: url,
+      filePath: persisted.filePath,
+      persistentPath: persisted.persistentPath,
       fileName: file.name,
-      fileSize: file.size,
+      fileSize: persisted.size || file.size,
       format: file.name.split('.').pop(),
       tags: [],
       description: ''
     })
-  })
-  ElMessage.success(`已导入 ${files.length} 个文件`)
+    count++
+  }
+  ElMessage.success(`已导入 ${count} 个文件${isElectron() ? '（已持久化）' : ''}`)
 }
 
 function viewAsset(asset: MediaAsset) { previewAsset(asset) }

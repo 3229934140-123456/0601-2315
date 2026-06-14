@@ -14,5 +14,10 @@ declare interface Window {
     readFile: (filePath: string) => Promise<string | null>
     getUserDataPath: () => Promise<string>
     openExternal: (url: string) => Promise<void>
+    getMediaDir: () => Promise<string>
+    saveMediaFile: (data: { name: string; type: string; base64: string }) => Promise<{ path: string; url: string; size: number } | null>
+    copyFileToMedia: (srcPath: string) => Promise<{ path: string; url: string; size: number } | null>
+    fileExists: (filePath: string) => Promise<boolean>
+    getFileUrl: (filePath: string) => Promise<string>
   }
 }

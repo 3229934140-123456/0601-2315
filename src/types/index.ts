@@ -46,12 +46,14 @@ export interface MediaAsset {
   type: 'audio' | 'video' | 'image' | 'document'
   title: string
   filePath: string
+  persistentPath?: string
   fileName: string
   fileSize: number
   duration?: number
   format?: string
   interviewPlanId?: string
   intervieweeId?: string
+  intervieweeName?: string
   recordedAt?: string
   importedAt: string
   description?: string

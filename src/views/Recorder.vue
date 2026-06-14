@@ -48,22 +48,32 @@
               </el-radio-group>
             </div>
             <div class="control-buttons">
-              <el-button v-if="!isPreviewing && !isRecording" size="large" :icon="View" @click="startPreview">
+              <el-button v-if="!isPreviewing && !isRecording && !isPaused" size="large" :icon="View" @click="startPreview">
                 开始预览
               </el-button>
-              <el-button v-if="isPreviewing && !isRecording" size="large" @click="stopPreview">
+              <el-button v-if="isPreviewing && !isRecording && !isPaused" size="large" @click="stopPreview">
                 停止预览
               </el-button>
-              <el-button
-                v-if="isPreviewing || isRecording"
-                size="large"
-                :type="isRecording ? 'warning' : 'danger'"
-                :icon="isRecording ? 'VideoPause' : VideoPlay"
-                class="record-btn"
-                @click="toggleRecording"
+              <el-tooltip
+                v-if="(isPreviewing && !isRecording && !isPaused) || isRecording || isPaused"
+                :content="supportsPauseResume ? '' : '当前环境不支持暂停/继续，仅能开始或停止录制'"
+                :disabled="supportsPauseResume"
+                placement="top"
               >
-                {{ isRecording ? '暂停录制' : '开始录制' }}
-              </el-button>
+                <el-button
+                  size="large"
+                  :type="isPaused ? 'primary' : (isRecording ? (supportsPauseResume ? 'warning' : 'primary') : 'danger')"
+                  :icon="isPaused ? VideoPlay : (isRecording && supportsPauseResume ? 'VideoPause' : VideoPlay)"
+                  class="record-btn"
+                  @click="toggleRecording"
+                  :disabled="isRecording && !supportsPauseResume && false"
+                >
+                  <template v-if="!isRecording && !isPaused">开始录制</template>
+                  <template v-else-if="isRecording && supportsPauseResume">暂停录制</template>
+                  <template v-else-if="isRecording && !supportsPauseResume">录制中...</template>
+                  <template v-else-if="isPaused">继续录制</template>
+                </el-button>
+              </el-tooltip>
               <el-button
                 v-if="isRecording || isPaused"
                 size="large"
@@ -189,6 +199,8 @@ import {
 import { useInterviewPlanStore } from '@/stores/interviewPlan'
 import { useMediaStore } from '@/stores/media'
 import { useTagStore } from '@/stores/profile'
+import { persistBlobFile, isElectron } from '@/utils/persist'
+import type { MediaAsset } from '@/types'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -206,7 +218,24 @@ const isPreviewing = ref(false)
 const isRecording = ref(false)
 const isPaused = ref(false)
 const elapsedSeconds = ref(0)
+const supportsPauseResume = ref(true)
 let timerInterval: ReturnType<typeof setInterval> | null = null
+
+function detectPauseResumeSupport() {
+  try {
+    if (typeof MediaRecorder === 'undefined') {
+      supportsPauseResume.value = false
+      return
+    }
+    const testStream = new MediaStream()
+    const testRecorder = new MediaRecorder(testStream)
+    const proto = Object.getPrototypeOf(testRecorder)
+    supportsPauseResume.value = typeof proto.pause === 'function' && typeof proto.resume === 'function'
+    try { testRecorder.stream.getTracks().forEach(t => t.stop()) } catch {}
+  } catch (e) {
+    supportsPauseResume.value = false
+  }
+}
 
 const cameras = ref<MediaDeviceInfo[]>([])
 const mics = ref<MediaDeviceInfo[]>([])
@@ -248,6 +277,7 @@ watch(selectedPlanId, (id) => {
 
 onMounted(() => {
   enumerateDevices()
+  detectPauseResumeSupport()
   if (!recordInfo.title) {
     recordInfo.title = '口述史录制_' + dayjs().format('YYYYMMDD_HHmm')
   }
@@ -353,10 +383,14 @@ function toggleRecording() {
     ElMessage.warning('请先开始预览')
     return
   }
-  if (isRecording.value) {
+  if (isRecording.value && supportsPauseResume.value) {
     pauseRecording()
-  } else {
+  } else if (isPaused.value && supportsPauseResume.value) {
+    resumeRecording()
+  } else if (!isRecording.value && !isPaused.value) {
     startRecording()
+  } else if (isRecording.value && !supportsPauseResume.value) {
+    ElMessage.info('当前环境不支持暂停，如需停止请点击"停止录制"')
   }
 }
 
@@ -400,10 +434,28 @@ function startRecording() {
 }
 
 function pauseRecording() {
-  if (mediaRecorder.value && mediaRecorder.value.state === 'recording') {
+  if (!mediaRecorder.value || mediaRecorder.value.state !== 'recording') return
+  try {
     mediaRecorder.value.pause()
     isRecording.value = false
     isPaused.value = true
+    ElMessage.info('已暂停录制，点击继续按钮恢复录制')
+  } catch (e) {
+    console.error('pause failed:', e)
+    ElMessage.warning('暂停失败，当前环境可能不支持暂停功能')
+  }
+}
+
+function resumeRecording() {
+  if (!mediaRecorder.value || mediaRecorder.value.state !== 'paused') return
+  try {
+    mediaRecorder.value.resume()
+    isRecording.value = true
+    isPaused.value = false
+    ElMessage.success('已恢复录制')
+  } catch (e) {
+    console.error('resume failed:', e)
+    ElMessage.warning('恢复录制失败，请停止当前录制并重新开始')
   }
 }
 
@@ -421,15 +473,16 @@ function removeClip(idx: number) {
   recordedClips.value.splice(idx, 1)
 }
 
-function saveClip(clip: { type: 'video' | 'audio'; blob: Blob; duration: string; size: number }) {
-  const url = URL.createObjectURL(clip.blob)
+async function saveClip(clip: { type: 'video' | 'audio'; blob: Blob; duration: string; size: number }) {
   const fileName = `${recordInfo.title || '录制素材'}_${Date.now()}.${recordInfo.format || 'webm'}`
-  const asset = mediaStore.addAsset({
+  const persisted = await persistBlobFile(clip.blob, fileName, clip.type === 'video' ? 'video/webm' : 'audio/webm')
+  const assetData = {
     type: clip.type,
     title: recordInfo.title || fileName,
-    filePath: url,
+    filePath: persisted.filePath,
+    persistentPath: persisted.persistentPath,
     fileName,
-    fileSize: clip.size,
+    fileSize: persisted.size || clip.size,
     duration: elapsedSeconds.value,
     format: recordInfo.format,
     interviewPlanId: selectedPlanId.value || undefined,
@@ -437,8 +490,9 @@ function saveClip(clip: { type: 'video' | 'audio'; blob: Blob; duration: string;
     recordedAt: dayjs().toISOString(),
     description: recordInfo.description,
     tags: [...recordInfo.tags]
-  })
-  ElMessage.success(`素材已保存，可前往「转写校对」处理`)
+  }
+  const asset = mediaStore.addAsset(assetData)
+  ElMessage.success(`素材已保存${persisted.persistentPath ? '（持久化）' : ''}，可前往「转写校对」处理`)
   if (confirm('是否立即前往转写校对？')) {
     router.push(`/transcript/${asset.id}`)
   }

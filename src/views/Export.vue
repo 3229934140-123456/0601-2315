@@ -189,6 +189,8 @@ import {
   Download, Document, Tickets, Notebook, Refresh, MagicStick
 } from '@element-plus/icons-vue'
 import { useMediaStore } from '@/stores/media'
+import { transcriptStore } from '@/stores/storage'
+import type { TranscriptSegment } from '@/types'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -198,6 +200,7 @@ const selectedAssetIds = ref<string[]>([])
 const exportTypes = ref<string[]>(['srt', 'markdown'])
 const previewFormat = ref('markdown')
 const previewText = ref('')
+const transcriptCache = ref<Record<string, TranscriptSegment[]>>({})
 const generatedSummary = ref<{
   overview: string
   keyTopics: string[]
@@ -223,7 +226,20 @@ const selectedAssets = computed(() =>
 
 const canExport = computed(() => selectedAssetIds.value.length > 0 && exportTypes.value.length > 0)
 
-watch([selectedAssetIds, previewFormat, exportOptions], () => {
+function loadTranscriptsForAssets() {
+  if (selectedAssetIds.value.length === 0) {
+    transcriptCache.value = {}
+    return
+  }
+  transcriptCache.value = transcriptStore.getByMultipleAssets(selectedAssetIds.value)
+}
+
+watch(selectedAssetIds, () => {
+  loadTranscriptsForAssets()
+  refreshPreview()
+}, { deep: true })
+
+watch([previewFormat, exportOptions], () => {
   refreshPreview()
 }, { deep: true })
 
@@ -275,50 +291,74 @@ function refreshPreview() {
 function generateContent(format: string): string {
   const lines: string[] = []
   selectedAssets.value.forEach((asset, assetIdx) => {
-    const transcripts = [...mediaStore.transcripts]
-      .filter(t => t.mediaAssetId === asset.id)
-      .sort((a, b) => a.startTime - b.startTime)
+    const transcripts = transcriptCache.value[asset.id] || []
 
     if (format === 'srt') {
-      transcripts.forEach((seg, i) => {
-        lines.push(String(i + 1))
-        lines.push(`${formatSrtTime(seg.startTime)} --> ${formatSrtTime(seg.endTime)}`)
-        lines.push(seg.text || '(无内容)')
-        if (exportOptions.includeAnnotations && seg.annotations.length) {
-          seg.annotations.forEach(a => {
-            const typeMap: Record<string, string> = { dialect: '方言', skill: '技艺', person: '人物', place: '地点', event: '事件' }
-            lines.push(`【${typeMap[a.type] || a.type}】${a.term}${a.explanation ? ' - ' + a.explanation : ''}`)
-          })
-        }
-        lines.push('')
-      })
-    } else if (format === 'vtt') {
-      lines.push('WEBVTT')
+      lines.push(`# ${asset.title}`)
       lines.push('')
-      transcripts.forEach((seg, i) => {
-        lines.push(String(i + 1))
-        lines.push(`${formatVttTime(seg.startTime)} --> ${formatVttTime(seg.endTime)}`)
-        lines.push(seg.text || '')
+      if (transcripts.length === 0) {
+        lines.push('1')
+        lines.push('00:00:00,000 --> 00:00:00,000')
+        lines.push('（暂无转写内容）')
         lines.push('')
-      })
+      } else {
+        transcripts.forEach((seg, i) => {
+          lines.push(String(i + 1))
+          lines.push(`${formatSrtTime(seg.startTime)} --> ${formatSrtTime(seg.endTime)}`)
+          lines.push(seg.text || '(无内容)')
+          if (exportOptions.includeAnnotations && seg.annotations.length) {
+            seg.annotations.forEach(a => {
+              const typeMap: Record<string, string> = { dialect: '方言', skill: '技艺', person: '人物', place: '地点', event: '事件' }
+              lines.push(`【${typeMap[a.type] || a.type}】${a.term}${a.explanation ? ' - ' + a.explanation : ''}`)
+            })
+          }
+          lines.push('')
+        })
+      }
+      if (assetIdx < selectedAssets.value.length - 1) lines.push('')
+    } else if (format === 'vtt') {
+      if (assetIdx === 0) {
+        lines.push('WEBVTT')
+        lines.push('')
+      }
+      lines.push(`NOTE ${asset.title}`)
+      lines.push('')
+      if (transcripts.length === 0) {
+        lines.push('1')
+        lines.push('00:00:00.000 --> 00:00:00.000')
+        lines.push('（暂无转写内容）')
+        lines.push('')
+      } else {
+        transcripts.forEach((seg, i) => {
+          lines.push(String(i + 1))
+          lines.push(`${formatVttTime(seg.startTime)} --> ${formatVttTime(seg.endTime)}`)
+          lines.push(seg.text || '')
+          lines.push('')
+        })
+      }
     } else if (format === 'txt') {
       if (selectedAssets.value.length > 1) {
         lines.push(`【${asset.title}】`)
         lines.push('')
       }
-      transcripts.forEach(seg => {
-        if (exportOptions.includeTimestamps) {
-          lines.push(`[${formatTime(seg.startTime)}] ${seg.text || ''}`)
-        } else {
-          lines.push(seg.text || '')
-        }
-        if (exportOptions.includeAnnotations && seg.annotations.length) {
-          seg.annotations.forEach(a => {
-            const typeMap: Record<string, string> = { dialect: '方言词', skill: '技艺名词', person: '人物', place: '地点', event: '事件' }
-            lines.push(`（${typeMap[a.type] || a.type}：${a.term}${a.explanation ? ' — ' + a.explanation : ''}）`)
-          })
-        }
-      })
+      if (transcripts.length === 0) {
+        lines.push('（暂无转写内容）')
+        lines.push('')
+      } else {
+        transcripts.forEach(seg => {
+          if (exportOptions.includeTimestamps) {
+            lines.push(`[${formatTime(seg.startTime)}] ${seg.text || ''}`)
+          } else {
+            lines.push(seg.text || '')
+          }
+          if (exportOptions.includeAnnotations && seg.annotations.length) {
+            seg.annotations.forEach(a => {
+              const typeMap: Record<string, string> = { dialect: '方言词', skill: '技艺名词', person: '人物', place: '地点', event: '事件' }
+              lines.push(`（${typeMap[a.type] || a.type}：${a.term}${a.explanation ? ' — ' + a.explanation : ''}）`)
+            })
+          }
+        })
+      }
       if (assetIdx < selectedAssets.value.length - 1) lines.push('')
     } else if (format === 'markdown') {
       if (assetIdx === 0) {
@@ -339,21 +379,26 @@ function generateContent(format: string): string {
       }
       lines.push('### 文稿内容')
       lines.push('')
-      transcripts.forEach(seg => {
-        if (exportOptions.includeTimestamps) {
-          lines.push(`**[${formatTime(seg.startTime)}]** ${seg.text || ''}`)
-        } else {
-          lines.push(seg.text || '')
-        }
+      if (transcripts.length === 0) {
+        lines.push('> *（暂无转写内容）*')
         lines.push('')
-        if (exportOptions.includeAnnotations && seg.annotations.length) {
-          seg.annotations.forEach(a => {
-            const typeMap: Record<string, string> = { dialect: '方言词', skill: '技艺名词', person: '人物', place: '地点', event: '事件' }
-            lines.push(`> *${typeMap[a.type] || a.type}：${a.term}*${a.explanation ? ' — ' + a.explanation : ''}`)
-          })
+      } else {
+        transcripts.forEach(seg => {
+          if (exportOptions.includeTimestamps) {
+            lines.push(`**[${formatTime(seg.startTime)}]** ${seg.text || ''}`)
+          } else {
+            lines.push(seg.text || '')
+          }
           lines.push('')
-        }
-      })
+          if (exportOptions.includeAnnotations && seg.annotations.length) {
+            seg.annotations.forEach(a => {
+              const typeMap: Record<string, string> = { dialect: '方言词', skill: '技艺名词', person: '人物', place: '地点', event: '事件' }
+              lines.push(`> *${typeMap[a.type] || a.type}：${a.term}*${a.explanation ? ' — ' + a.explanation : ''}`)
+            })
+            lines.push('')
+          }
+        })
+      }
     }
   })
   return lines.join('\n')
@@ -362,8 +407,9 @@ function generateContent(format: string): string {
 function generateSummary() {
   const allSegments: Array<{ assetId: string; text: string; time: number }> = []
   selectedAssets.value.forEach(asset => {
-    mediaStore.transcripts
-      .filter(t => t.mediaAssetId === asset.id && t.text.trim())
+    const transcripts = transcriptCache.value[asset.id] || []
+    transcripts
+      .filter(t => t.text.trim())
       .forEach(t => allSegments.push({ assetId: asset.id, text: t.text, time: t.startTime }))
   })
 
@@ -372,12 +418,11 @@ function generateSummary() {
     return
   }
 
-  const allText = allSegments.map(s => s.text).join('')
   const topics = ['传统技艺', '口述历史', '文化传承', '艺人经历', '学艺历程', '行业变迁']
   const names = new Set<string>()
   selectedAssets.value.forEach(asset => {
-    mediaStore.transcripts
-      .filter(t => t.mediaAssetId === asset.id)
+    const transcripts = transcriptCache.value[asset.id] || []
+    transcripts
       .forEach(t => t.annotations.filter(a => a.type === 'person').forEach(a => names.add(a.term)))
   })
 
